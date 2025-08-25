@@ -3,8 +3,10 @@ package io.kestra.core.models.triggers;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.conditions.ConditionContext;
 import io.kestra.core.models.executions.Execution;
+import io.kestra.core.runners.RunContext;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.Optional;
@@ -30,7 +32,15 @@ public interface PollingTriggerInterface extends WorkerTriggerInterface {
      * Schedulable triggers must override this method.
      */
     default ZonedDateTime nextEvaluationDate(ConditionContext conditionContext, Optional<? extends TriggerContext> last) throws Exception {
-        return ZonedDateTime.now().plus(this.getInterval());
+        try {
+            return ZonedDateTime.now().plus(this.getInterval());
+        } catch (DateTimeException | ArithmeticException e) {
+            RunContext runContext = conditionContext.getRunContext();
+            if (runContext != null) {
+                runContext.logger().warn("Trigger interval '{}' causes date overflow: {}. Using 60 seconds fallback.", this.getInterval(), e.getMessage());
+            }
+            return ZonedDateTime.now().plus(Duration.ofSeconds(60));
+        }
     }
 
     /**
@@ -38,6 +48,10 @@ public interface PollingTriggerInterface extends WorkerTriggerInterface {
      * Schedulable triggers must override this method as it's used to init them when there is no evaluation date.
      */
     default ZonedDateTime nextEvaluationDate() {
-        return ZonedDateTime.now().plus(this.getInterval());
+        try {
+            return ZonedDateTime.now().plus(this.getInterval());
+        } catch (DateTimeException | ArithmeticException e) {
+            return ZonedDateTime.now().plus(Duration.ofSeconds(60));
+        }
     }
 }
